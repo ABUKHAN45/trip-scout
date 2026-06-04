@@ -1,0 +1,479 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Trip Scout API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: airports
+    description: Airport search/autocomplete
+  - name: flights
+    description: Flight search operations
+  - name: trips
+    description: Saved trips / watchlist
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /airports/search:
+    get:
+      operationId: searchAirports
+      tags: [airports]
+      summary: Search airports by name or IATA code
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+          description: Search query (airport name, city, or IATA code)
+      responses:
+        "200":
+          description: List of matching airports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AirportSuggestion"
+
+  /flights/search:
+    post:
+      operationId: searchFlights
+      tags: [flights]
+      summary: Search cheapest flights across a date range
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlightSearch"
+      responses:
+        "200":
+          description: Price per departure day across the range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlightSearchResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /trips:
+    get:
+      operationId: listTrips
+      tags: [trips]
+      summary: List all saved trips
+      responses:
+        "200":
+          description: List of saved trips
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trip"
+    post:
+      operationId: saveTrip
+      tags: [trips]
+      summary: Save a trip to the watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TripInput"
+      responses:
+        "201":
+          description: Trip saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /trips/{id}:
+    get:
+      operationId: getTrip
+      tags: [trips]
+      summary: Get a saved trip by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trip details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateTrip
+      tags: [trips]
+      summary: Update trip cost estimates
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TripUpdate"
+      responses:
+        "200":
+          description: Updated trip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteTrip
+      tags: [trips]
+      summary: Delete a saved trip
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /trips/{id}/refresh:
+    post:
+      operationId: refreshTrip
+      tags: [trips]
+      summary: Re-run flight search for a saved trip to get fresh prices
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Fresh search results for the trip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlightSearchResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /trips/{id}/estimate:
+    post:
+      operationId: estimateTripCost
+      tags: [trips]
+      summary: Calculate total trip cost estimate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostInput"
+      responses:
+        "200":
+          description: Total cost breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CostEstimate"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    AirportSuggestion:
+      type: object
+      required: [iata, name, city, country]
+      properties:
+        iata:
+          type: string
+        name:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+
+    DayPrice:
+      type: object
+      required: [date, price, currency]
+      properties:
+        date:
+          type: string
+          description: ISO date string (YYYY-MM-DD)
+        price:
+          type: number
+        currency:
+          type: string
+        airline:
+          type: ["string", "null"]
+        stops:
+          type: ["integer", "null"]
+        duration:
+          type: ["string", "null"]
+          description: e.g. "2h 30m"
+
+    FlightDetail:
+      type: object
+      required: [departureDate, price, currency, origin, destination]
+      properties:
+        departureDate:
+          type: string
+        returnDate:
+          type: ["string", "null"]
+        price:
+          type: number
+        currency:
+          type: string
+        airline:
+          type: ["string", "null"]
+        flightNumber:
+          type: ["string", "null"]
+        stops:
+          type: ["integer", "null"]
+        duration:
+          type: ["string", "null"]
+        origin:
+          type: string
+        destination:
+          type: string
+
+    FlightSearch:
+      type: object
+      required: [origin, destination, departureDateFrom, departureDateTo, travelers]
+      properties:
+        origin:
+          type: string
+          description: IATA airport code
+        destination:
+          type: string
+          description: IATA airport code
+        departureDateFrom:
+          type: string
+          description: ISO date string
+        departureDateTo:
+          type: string
+          description: ISO date string
+        returnDateFrom:
+          type: ["string", "null"]
+          description: ISO date string
+        returnDateTo:
+          type: ["string", "null"]
+          description: ISO date string
+        travelers:
+          type: integer
+          minimum: 1
+
+    FlightSearchResult:
+      type: object
+      required: [pricesByDay, searchedAt]
+      properties:
+        pricesByDay:
+          type: array
+          items:
+            $ref: "#/components/schemas/DayPrice"
+        searchedAt:
+          type: string
+          description: ISO timestamp of when the search was performed
+
+    Trip:
+      type: object
+      required: [id, origin, destination, departureDateFrom, departureDateTo, travelers, createdAt]
+      properties:
+        id:
+          type: integer
+        origin:
+          type: string
+        originName:
+          type: ["string", "null"]
+        destination:
+          type: string
+        destinationName:
+          type: ["string", "null"]
+        departureDateFrom:
+          type: string
+        departureDateTo:
+          type: string
+        returnDateFrom:
+          type: ["string", "null"]
+        returnDateTo:
+          type: ["string", "null"]
+        travelers:
+          type: integer
+        selectedFlight:
+          description: JSON blob of the selected FlightDetail
+          type: ["object", "null"]
+          additionalProperties: true
+        hotelCostPerNight:
+          type: ["number", "null"]
+        dailySpend:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: ["string", "null"]
+
+    TripInput:
+      type: object
+      required: [origin, destination, departureDateFrom, departureDateTo, travelers]
+      properties:
+        origin:
+          type: string
+        originName:
+          type: ["string", "null"]
+        destination:
+          type: string
+        destinationName:
+          type: ["string", "null"]
+        departureDateFrom:
+          type: string
+        departureDateTo:
+          type: string
+        returnDateFrom:
+          type: ["string", "null"]
+        returnDateTo:
+          type: ["string", "null"]
+        travelers:
+          type: integer
+          minimum: 1
+        selectedFlight:
+          type: ["object", "null"]
+          additionalProperties: true
+        hotelCostPerNight:
+          type: ["number", "null"]
+        dailySpend:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    TripUpdate:
+      type: object
+      properties:
+        selectedFlight:
+          type: ["object", "null"]
+          additionalProperties: true
+        hotelCostPerNight:
+          type: ["number", "null"]
+        dailySpend:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    CostInput:
+      type: object
+      required: [flightPrice, nights, days]
+      properties:
+        flightPrice:
+          type: number
+        hotelCostPerNight:
+          type: number
+        dailySpend:
+          type: number
+        nights:
+          type: integer
+          minimum: 0
+        days:
+          type: integer
+          minimum: 1
+
+    CostEstimate:
+      type: object
+      required: [flightCost, hotelCost, dailySpendTotal, totalCost, nights, days]
+      properties:
+        flightCost:
+          type: number
+        hotelCost:
+          type: number
+        dailySpendTotal:
+          type: number
+        totalCost:
+          type: number
+        nights:
+          type: integer
+        days:
+          type: integer
+        currency:
+          type: ["string", "null"]
